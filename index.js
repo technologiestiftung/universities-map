@@ -1,3 +1,5 @@
+// const crossfilter = require('./node_modules/crossfilter/index.js')
+
 const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _container) {
     let module = {},
     data = _data,
@@ -30,8 +32,9 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
         })
 
         extent = d3.extent(arr);
+        // console.log(extent)
         scale = d3.scaleLinear()
-            .domain([extent[0], extent[1]])
+            .domain([24, 68429])
             .range([rangeMin, rangeMax]);
         
         svg.selectAll('line')
@@ -59,6 +62,7 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .attr("y2", d => { 
                 if(d.count_students) {
                     const  lnglat = proj([d.lng, d.lat]);
+                    console.log(`scale in Px: ${scale(d.count_students)}, count as int: ${d.count_students}, pos in px: ${lnglat[1]}`)
                     return lnglat[1] - scale(d.count_students);
                 } else {
                     return "1px"
@@ -86,7 +90,8 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
     svg,
     extent,
     simulation,
-    cell
+    cell,
+    voro
 
     svg = container.append('svg')
         .attr('width', width)
@@ -97,7 +102,6 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
     
     module.init = () => {
         data.forEach(uni => {
-            uni = type(uni);
             arr.push(uni[filterKey]);
         })
 
@@ -110,7 +114,7 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
         simulation = d3.forceSimulation(data)
             .force("x", d3.forceX(d => { return x(d[filterKey]) }).strength(0.5))
             .force("y", d3.forceY(d => { return innerHeight / 2 }))
-            .force("collide", d3.forceCollide(4))
+            .force("collide", d3.forceCollide(9))
             .stop();
         
         for (var i = 0; i < 120; ++i) simulation.tick();
@@ -119,86 +123,44 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
             .attr("transform", "translate(0," + innerHeight + ")")
             .call(d3.axisBottom(x).ticks(20, ".0s"));
         
+        voro = d3.voronoi()
+            .extent([[-1, -1], [width + 1 , height + 1]])
+            .x((d) => { return d.x; })
+            .y((d) => { return d.y; })
+            .polygons(data)
+        
         cell = g.append('g')
-            .attr('class', 'cells')
-            .selectAll('g').data(d3.voronoi()
-                .extent([[-1, -1], [width + 1 , height + 1]])
-                .x((d) => { return d.x; })
-                .y((d) => { return d.y; })
-            .polygons(data)).enter().append("g");
-        
-        cell.append("circle")
-            .attr("r", 3)
-            .attr("cx", function(d) { 
-                if(d != undefined) {
-                    return d.data.x;
-                }
-                })
-            .attr("cy", function(d) {
-                if(d != undefined) {
+            .attr("class", "cells")
 
-                    return d.data.y; 
-                }
-            });
-            
-        
+        voro.forEach( item => {
+            cell.append("circle")
+                .attr("r", 3)
+                .attr("cx", item.data.x)
+                .attr("cy",item.data.y);
+        })  
     }
     return module;
 }
-
-function type(d) {
-    if (!d.count_students) return;
-    d.count_students = +d.count_students;
-    return d;
-  }
 
 d3.queue()
     .defer(d3.json, "./data/unis.json")
     .defer(d3.json, "./data/germany.json")
     .await( (error, unis, counties) => {
-        const map_chart = mapChart(unis, counties, '', 'count_students', d3.select('#mapChart'));
+
+        let cross_unis = crossfilter(unis);
+
+        count = cross_unis.dimension(function(d) { return d.count_students; });
+        count.filter( (d) => {
+            if(d > 10000) { return true; } 
+            else { return false; }
+            
+        });
+
+        // console.log(cross_unis.allFiltered());
+
+        const map_chart = mapChart(cross_unis.allFiltered(), counties, '', 'count_students', d3.select('#mapChart'));
         map_chart.init();
 
-        const bee_chart = beeChart(unis, '', 'count_students', d3.select('#beeChart'));
+        const bee_chart = beeChart(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart'));
         bee_chart.init();
     })
-
-
-
-    // function updateCharts() {
-    //     // set new data into current charts
-    //     const map_chart = mapChart(unis, counties, '', d3.select('#mapChart'))
-    // }
-    
-
-
-
-    // d3.json(unis, (err,data) => {
-    //     svg.selectAll("circle")
-    //         .data(data)
-    //         .enter()
-    //         .append("circle")
-    //         .attr("cx", d => { 
-    //             const  lnglat = proj([d.anschrift.lng, d.anschrift.lat]);
-    //             return lnglat[0]
-    //         })
-    //         .attr("cy", d => { 
-    //             const  lnglat = proj([d.anschrift.lng, d.anschrift.lat]);
-    //             return lnglat[1]
-    //         })
-    //         .attr("r", d => { 
-    //             if(d.steckbrief.Studierendenzahl) { return scale(parseInt(d.steckbrief.Studierendenzahl.replace(" (WS 2016/2017)", ""))) } else 
-    //             { return "1px"; }
-    //         })
-    //         .attr("fill", "none")
-    //         .attr('opacity', 0.5)
-    //         .attr("stroke", "1px")
-    //         .on("mouseover", (d) => {
-    //             const name = d.name;
-    //             const anzahl = parseInt(d.steckbrief.Studierendenzahl.replace(" (WS 2016/2017)", ""));
-    //             return document.getElementById('name').innerHTML=name;
-    //         })
-    // })
-
-
-// })
