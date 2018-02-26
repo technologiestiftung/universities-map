@@ -62,7 +62,7 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .attr("y2", d => { 
                 if(d.count_students) {
                     const  lnglat = proj([d.lng, d.lat]);
-                    console.log(`scale in Px: ${scale(d.count_students)}, count as int: ${d.count_students}, pos in px: ${lnglat[1]}`)
+                    // console.log(`scale in Px: ${scale(d.count_students)}, count as int: ${d.count_students}, pos in px: ${lnglat[1]}`)
                     return lnglat[1] - scale(d.count_students);
                 } else {
                     return "1px"
@@ -91,15 +91,39 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
     extent,
     simulation,
     cell,
-    voro
-
-    svg = container.append('svg')
-        .attr('width', width)
-        .attr('height', height)
-
-    g = svg.append('g')
-        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    voro,
+    brush = d3.brushX(),
+    brushDirty,
+    gBrush
     
+    svg = container.append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    
+    g = svg.append('g')
+    .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    const brushed = () => {
+        if(!d3.event.selection) return;
+        const selection = d3.event.selection.map(x.invert, x);
+        const dots = d3.selectAll('.dot');
+
+        dots.classed('selected', d => {
+
+            console.log(d);
+        })
+
+        voro.classed("selected", function(d) { 
+            return selection[0] <= d[0] && d[0] <= selection[1]; 
+        });
+    }
+    
+    gBrush = g.append('g').attr('class', 'brush')
+        .call(brush)
+
+    brush
+        .on("brush", brushed);
+
     module.init = () => {
         data.forEach(uni => {
             arr.push(uni[filterKey]);
@@ -134,6 +158,8 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
 
         voro.forEach( item => {
             cell.append("circle")
+                .attr('data-students', item.data.count_students)
+                .attr("class", 'dot')
                 .attr("r", 3)
                 .attr("cx", item.data.x)
                 .attr("cy",item.data.y);
@@ -141,6 +167,8 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
     }
     return module;
 }
+
+
 
 d3.queue()
     .defer(d3.json, "./data/unis.json")
@@ -151,7 +179,7 @@ d3.queue()
 
         count = cross_unis.dimension(function(d) { return d.count_students; });
         count.filter( (d) => {
-            if(d > 10000) { return true; } 
+            if(d > 10) { return true; } 
             else { return false; }
             
         });
