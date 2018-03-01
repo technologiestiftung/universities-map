@@ -1,5 +1,3 @@
-// const crossfilter = require('./node_modules/crossfilter/index.js')
-
 const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _container) {
     let module = {},
     data = _data,
@@ -41,6 +39,7 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .data(data)
             .enter()
             .append('line')
+            .attr('class', 'map__line')
             .attr("x1", d => { 
                 if(d.count_students) {
                     const  lnglat = proj([d.lng, d.lat]);
@@ -68,61 +67,56 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
                     return "1px"
                 }
             })
-            .attr("stroke", "red")
+            .attr("stroke", "black")
             .attr("stroke-width", "1px")
     }
     return module;
 }
 
-const beeChart = (_data, _filterFunction, _filterKey, _container) => {
+const beeChartPlugin = (_data, _filterFunction, _filterKey, _container) => {
     let module = {},
-    arr = [],
     width = 960,
-    data = _data,
-    height = 400,
+    height = 500,
     margin = { top: 40, right: 40, bottom: 40, left: 40 },
     innerHeight = height - margin.top - margin.bottom,
     innerWidth = width - margin.left - margin.right,
-    filterKey = _filterKey,
-    x,
-    g,
     container = _container,
+    filterKey = _filterKey,
+    data = _data,
+    swarm,
     svg,
-    extent,
-    simulation,
-    cell,
-    voro,
     brush = d3.brushX(),
-    brushDirty,
-    gBrush
-    
+    gBrush,
+    g,
+    x,
+    arr = []
+
     svg = container.append('svg')
-    .attr('width', width)
-    .attr('height', height)
+        .attr('width', width)
+        .attr('height', height)
     
     g = svg.append('g')
-    .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
     const brushed = () => {
         if(!d3.event.selection) return;
         const selection = d3.event.selection.map(x.invert, x);
         const dots = d3.selectAll('.dot');
+        const lines = d3.selectAll('.map__line');
 
-        dots.classed('selected', d => {
+        lines.classed("selected--lines", function(d) { 
+            return selection[0] <= d.count_students && d.count_students <= selection[1]; 
+        });
 
-            console.log(d);
-        })
-
-        voro.classed("selected", function(d) { 
-            return selection[0] <= d[0] && d[0] <= selection[1]; 
+        dots.classed("selected--cells", function(d) { 
+            return selection[0] <= d.datum.count_students && d.datum.count_students <= selection[1]; 
         });
     }
     
     gBrush = g.append('g').attr('class', 'brush')
-        .call(brush)
+        .call(brush);
 
-    brush
-        .on("brush", brushed);
+    brush.on('brush', brushed);
 
     module.init = () => {
         data.forEach(uni => {
@@ -134,40 +128,37 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
         x = d3.scaleLinear()
             .domain([extent[0], extent[1]])
             .range([0, innerWidth])
-
-        simulation = d3.forceSimulation(data)
-            .force("x", d3.forceX(d => { return x(d[filterKey]) }).strength(0.5))
-            .force("y", d3.forceY(d => { return innerHeight / 2 }))
-            .force("collide", d3.forceCollide(9))
-            .stop();
-        
-        for (var i = 0; i < 120; ++i) simulation.tick();
+            
+        swarm = d3.beeswarm()
+            .data(data)
+            .distributeOn((d) => { 
+                return x(d.count_students);
+            })
+            .radius(3)
+            .orientation('horizontal')
+            .side('symetric')
+            .arrange()
+            
         g.append('g')
             .attr('class', 'axis axis--x')
             .attr("transform", "translate(0," + innerHeight + ")")
             .call(d3.axisBottom(x).ticks(20, ".0s"));
-        
-        voro = d3.voronoi()
-            .extent([[-1, -1], [width + 1 , height + 1]])
-            .x((d) => { return d.x; })
-            .y((d) => { return d.y; })
-            .polygons(data)
-        
+                
         cell = g.append('g')
-            .attr("class", "cells")
+            .attr("class", "cells");
 
-        voro.forEach( item => {
-            cell.append("circle")
-                .attr('data-students', item.data.count_students)
-                .attr("class", 'dot')
-                .attr("r", 3)
-                .attr("cx", item.data.x)
-                .attr("cy",item.data.y);
-        })  
+        cell.selectAll('circle')
+            .data(swarm)
+            .enter()
+              .append('circle')
+                .attr('class', 'dot')
+                .attr('cx', function(bee) { return bee.x; })
+                .attr('cy', function(bee) { return bee.y + 200; })
+                .attr('r', 2)
+                // .style('fill', function(bee) { return fillScale(bee.datum.bar); })
     }
     return module;
 }
-
 
 
 d3.queue()
@@ -179,7 +170,7 @@ d3.queue()
 
         count = cross_unis.dimension(function(d) { return d.count_students; });
         count.filter( (d) => {
-            if(d > 10) { return true; } 
+            if(d > 1) { return true; } 
             else { return false; }
             
         });
@@ -189,6 +180,9 @@ d3.queue()
         const map_chart = mapChart(cross_unis.allFiltered(), counties, '', 'count_students', d3.select('#mapChart'));
         map_chart.init();
 
-        const bee_chart = beeChart(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart'));
-        bee_chart.init();
+        // const bee_chart = beeChart(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart'));
+        // bee_chart.init();
+
+        const bee_chart_2 = beeChartPlugin(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart2'))
+        bee_chart_2.init();
     })
