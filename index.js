@@ -35,11 +35,15 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .domain([24, 68429])
             .range([rangeMin, rangeMax]);
         
-        svg.selectAll('line')
+        
+        
+        const lines = svg.selectAll('g')
             .data(data)
             .enter()
+            .append('g')
+            .attr('class', 'line__wrapper')
             .append('line')
-            .attr('class', 'map__line')
+            .attr('class', 'line__wrapper--line')
             .attr("x1", d => { 
                 if(d.count_students) {
                     const  lnglat = proj([d.lng, d.lat]);
@@ -70,10 +74,17 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .attr("stroke", "black")
             .attr("stroke-width", "1px")
     }
+    module.scale = () => {
+        scale = d3.scaleLinear()
+            .domain([24, 68429])
+            .range([rangeMin, rangeMax]);
+        return scale;
+    }
+
     return module;
 }
 
-const beeChartPlugin = (_data, _filterFunction, _filterKey, _container) => {
+const beeChart = (_data, _filterFunction, _filterKey, _container) => {
     let module = {},
     width = 960,
     height = 500,
@@ -100,23 +111,52 @@ const beeChartPlugin = (_data, _filterFunction, _filterKey, _container) => {
 
     const brushed = () => {
         if(!d3.event.selection) return;
+
+        return selection;
+        
         const selection = d3.event.selection.map(x.invert, x);
         const dots = d3.selectAll('.dot');
-        const lines = d3.selectAll('.map__line');
+        const lines = d3.selectAll('.line__wrapper--line');
 
-        lines.classed("selected--lines", function(d) { 
-            return selection[0] <= d.count_students && d.count_students <= selection[1]; 
+        lines.classed("unselected--lines", function(d) {
+            const condition = selection[0] >= d[filterKey] || selection[1] <= d[filterKey];
+            const current = d3.select(this)
+            const y2 = current.attr('y2');
+            
+            if (condition) {
+                current.transition().attr('y2', current.attr('y1') - 2)
+            } else {
+                current.transition().attr('y2', y2);
+            }
+        
+            return condition;
+        });
+
+        lines.classed("selected--lines", function(d) {
+            const condition = selection[0] <= d[filterKey] && d[filterKey] <= selection[1];
+            const current = d3.select(this)
+            const y2 = current.attr('y2');
+
+            if (condition) { current.transition().attr('y2', y2); }
+
+            return condition; 
         });
 
         dots.classed("selected--cells", function(d) { 
-            return selection[0] <= d.datum.count_students && d.datum.count_students <= selection[1]; 
+            return selection[0] <= d.datum[filterKey] && d.datum[filterKey] <= selection[1]; 
         });
+    }
+
+    const check = () => {
+        const brush = d3.select('rect.selection');
+        console.log('asdlkjhaslfkjh')
     }
     
     gBrush = g.append('g').attr('class', 'brush')
         .call(brush);
 
     brush.on('brush', brushed);
+    // brush.on('click', check);
 
     module.init = () => {
         data.forEach(uni => {
@@ -132,7 +172,7 @@ const beeChartPlugin = (_data, _filterFunction, _filterKey, _container) => {
         swarm = d3.beeswarm()
             .data(data)
             .distributeOn((d) => { 
-                return x(d.count_students);
+                return x(d[filterKey]);
             })
             .radius(3)
             .orientation('horizontal')
@@ -160,29 +200,48 @@ const beeChartPlugin = (_data, _filterFunction, _filterKey, _container) => {
     return module;
 }
 
+const tooltip = (_data, _container) => {
+    let module = {},
+    container = _container,
+    data = _data
+
+    console.log(container);
+
+    module.init = () => {
+        const wrapper = container.append('div')
+            .attr('class', 'tooltip__wrapper')
+
+        console.log(data);
+    }
+
+    return module;
+}
 
 d3.queue()
     .defer(d3.json, "./data/unis.json")
     .defer(d3.json, "./data/germany.json")
     .await( (error, unis, counties) => {
 
+        let filter = "count_students";
+        
         let cross_unis = crossfilter(unis);
-
-        count = cross_unis.dimension(function(d) { return d.count_students; });
+        
+        count = cross_unis.dimension(function(d) { return d[filter]; });
         count.filter( (d) => {
             if(d > 1) { return true; } 
             else { return false; }
             
         });
-
-        // console.log(cross_unis.allFiltered());
-
-        const map_chart = mapChart(cross_unis.allFiltered(), counties, '', 'count_students', d3.select('#mapChart'));
+                
+        const map_chart = mapChart(cross_unis.allFiltered(), counties, '', filter, d3.select('#mapChart'));
+        const scale = map_chart.scale();
         map_chart.init();
 
-        // const bee_chart = beeChart(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart'));
-        // bee_chart.init();
+        console.log(scale);
 
-        const bee_chart_2 = beeChartPlugin(cross_unis.allFiltered(), '', 'count_students', d3.select('#beeChart2'))
-        bee_chart_2.init();
+        const bee_chart = beeChart(cross_unis.allFiltered(), '', filter, d3.select('#beeChart2'))
+        bee_chart.init();
+
+        const tool_tip = tooltip(cross_unis.allFiltered(), d3.select('#tooltip'));
+        tool_tip.init();
     })
