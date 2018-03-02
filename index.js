@@ -1,9 +1,12 @@
+let map_chart, bee_chart, tool_tip;
+
 const rangeMin = 1,
 rangeMax = 150,
 filter = "count_students",
 scale = d3.scaleLinear()
     .domain([24, 68429])
     .range([rangeMin, rangeMax]);
+
 
 
 
@@ -44,8 +47,6 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .domain([24, 68429])
             .range([rangeMin, rangeMax]);
         
-        
-        
         const lines = svg.selectAll('g')
             .data(data)
             .enter()
@@ -74,7 +75,6 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .attr("y2", d => { 
                 if(d.count_students) {
                     const  lnglat = proj([d.lng, d.lat]);
-                    // console.log(`scale in Px: ${scale(d.count_students)}, count as int: ${d.count_students}, pos in px: ${lnglat[1]}`)
                     return lnglat[1] - scale(d.count_students);
                 } else {
                     return "1px"
@@ -167,7 +167,7 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
                 .attr('cx', function(bee) { return bee.x; })
                 .attr('cy', function(bee) { return bee.y + 200; })
                 .attr('r', 2)
-                // .style('fill', function(bee) { return fillScale(bee.datum.bar); })
+                .on('mouseover', d => { updateTooltip(d); })
     }
     return module;
 }
@@ -186,22 +186,19 @@ d3.queue()
             
         });
                 
-        const map_chart = mapChart(cross_unis.allFiltered(), counties, '', filter, d3.select('#mapChart'));
+        map_chart = mapChart(cross_unis.allFiltered(), counties, '', filter, d3.select('#mapChart'));
         map_chart.init();
 
-        const bee_chart = beeChart(cross_unis.allFiltered(), '', filter, d3.select('#beeChart2'))
+        bee_chart = beeChart(cross_unis.allFiltered(), '', filter, d3.select('#beeChart2'))
         bee_chart.init();
 
-        // const tool_tip = tooltip(cross_unis.allFiltered(), d3.select('#tooltip'));
-        // tool_tip.init();
+        tool_tip = tooltip(cross_unis.allFiltered(), d3.select('#tooltip'));
+        tool_tip.init();
     })
 
-const updateCharts = () => {
-    // map_chart.data()
-    // bee_chart.data()
-    
+updateTooltip = (selected) => {
+    console.log(`selected: ${selected}`)
 }
-
 
 update = (filterKey) => {
     let selection = brush_extent;
@@ -233,23 +230,47 @@ update = (filterKey) => {
     });
 }
 
+const tooltip = (_data, _container) => {
+    let module = {},
+    container = _container,
+    block__name, block__type, block__status
+    data = _data[2] // send real data as the input
+    
+    module.init = () => {
+        const wrapper = container.append('div')
+            .attr('class', 'tooltip__wrapper')
 
-    // const tooltip = (_data, _container) => {
-    //     let module = {},
-    //     container = _container,
-    //     data = _data
+            const props = [
+                {'name': 'Name'},
+                {'sponsor': 'Träger'},
+                {'county': 'Bundesland'},
+                {'year': 'Gründung'},
+                {'count_studies': 'Anzahl Studiengänge'},
+                {'count_students': 'Anzahl Studenten'}
+            ];
+
+            props.forEach(prop => {
+                console.log(Object.values(prop)[0]);
+                const block__name = wrapper.append('div')
+                    .attr('class', `block__${Object.keys(prop)[0]}`)
+
+                const block__type = block__name
+                    .append('span')
+                    .attr('class', `block__${Object.keys(prop)[0]}--type`)
+                    .text(`${Object.values(prop)[0]}: `)
+
+                const block__status = block__name
+                    .append('span')
+                    .attr('class', `block__${Object.keys(prop)[0]}--status`)
+                    .text(data[Object.keys(prop)[0]])
+            })
+    }
+        module.update = () => {
+
+        }
     
-    //     console.log(container);
-    
-    //     module.init = () => {
-    //         const wrapper = container.append('div')
-    //             .attr('class', 'tooltip__wrapper')
-    
-    //         console.log(data);
-    //     }
-    
-    //     return module;
-    // }
+        return module;
+    }
 
 
 
