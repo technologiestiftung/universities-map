@@ -16,12 +16,14 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
     geojson = _geojson,
     container = _container,
     arr = [],
+    filterKey = _filterKey,
     extent,
     width = 500,
     height = 500,
     rangeMin = 1,
     rangeMax = 150,
     scale,
+    lines,
     svg = container.append('svg')
         .attr('width', width)
         .attr('height', height)
@@ -47,7 +49,7 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .domain([24, 68429])
             .range([rangeMin, rangeMax]);
         
-        const lines = svg.selectAll('g')
+        lines = svg.selectAll('g')
             .data(data)
             .enter()
             .append('g')
@@ -55,27 +57,27 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .append('line')
             .attr('class', 'line__wrapper--line')
             .attr("x1", d => { 
-                if(d.count_students) {
+                if(d[filterKey]) {
                     const  lnglat = proj([d.lng, d.lat]);
                     return lnglat[0]
                 } else { return "1px" }
             })
             .attr("y1", d => { 
-                if(d.count_students) {
+                if(d[filterKey]) {
                     const  lnglat = proj([d.lng, d.lat]);
                     return lnglat[1]
                 }
             })
             .attr("x2", d => { 
-                if(d.count_students) {
+                if(d[filterKey]) {
                     const  lnglat = proj([d.lng, d.lat]);
                     return lnglat[0]
                 }
             })
             .attr("y2", d => { 
-                if(d.count_students) {
+                if(d[filterKey]) {
                     const  lnglat = proj([d.lng, d.lat]);
-                    return lnglat[1] - scale(d.count_students);
+                    return lnglat[1] - scale(d[filterKey]);
                 } else {
                     return "1px"
                 }
@@ -89,6 +91,20 @@ const mapChart = function (_data, _geojson, _filterFunction, _filterKey, _contai
             .range([rangeMin, rangeMax]);
         return scale;
     }
+    module.update = (data) => {
+
+        
+        data.forEach( uni => {
+
+            lines
+                .attr('class', d => {
+                    const color = d[filterKey] == uni[filterKey] ? 'selected--lines' : 'unselected--lines';
+                    return color;
+                })
+        
+        })
+    }
+
 
     return module;
 }
@@ -122,13 +138,28 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
         if(!d3.event.selection) return;
         const selection = d3.event.selection.map(x.invert, x);
         brush_extent = selection;
-        update(filterKey);
+        let uni_selection = { 'included': [], 'excluded': [] };
+        
+        // make selection of data points to send to update function
+        data.forEach(uni => {
+            const included = selection[0] <= uni[filterKey] && uni[filterKey] <= selection[1];
+            const excluded = uni[filterKey] < selection[0] || uni[filterKey] > selection[1];
+
+            if (included) { 
+                uni_selection.included.push(uni); 
+            } else {
+                uni_selection.excluded.push(uni);
+            }
+        });
+
+        // update(filterKey);
+        update(uni_selection);
     }
     
     gBrush = g.append('g').attr('class', 'brush')
         .call(brush);
 
-    brush.on('brush', brushed);
+    brush.on('end', brushed);
 
     module.init = () => {
         data.forEach(uni => {
@@ -167,7 +198,7 @@ const beeChart = (_data, _filterFunction, _filterKey, _container) => {
                 .attr('cx', function(bee) { return bee.x; })
                 .attr('cy', function(bee) { return bee.y + 200; })
                 .attr('r', 2)
-                .on('mouseover', d => { updateTooltip(d); })
+                .on('mouseover', d => { update(d); })
     }
     return module;
 }
@@ -196,79 +227,92 @@ d3.queue()
         tool_tip.init();
     })
 
-updateTooltip = (selected) => {
-    console.log(`selected: ${selected}`)
+update = (selection) => {
+    // case brush selection
+    if (selection.included != undefined) {
+        console.log('inside brush selection');
+        map_chart.update(selection.included);
+    }
+    // case single item hovered
+    else if (selection.datum != undefined) {
+        console.log('inside single item');
+        const selection_arr = [selection.datum];
+        map_chart.update(selection_arr);
+    }
+
+    tool_tip.update(selection);
 }
 
-update = (filterKey) => {
-    let selection = brush_extent;
-    const dots = d3.selectAll('.dot');
-    const lines = d3.selectAll('.line__wrapper--line');
+// update = (filterKey) => {
+//     let selection = brush_extent;
+//     const dots = d3.selectAll('.dot');
+//     const lines = d3.selectAll('.line__wrapper--line');
 
-    lines.classed("selected--lines", function(d) {
-        const condition = selection[0] <= d[filterKey] && d[filterKey] <= selection[1];
-        const current = d3.select(this)
-        const y2 = current.attr('y2');
-        return condition; 
-    });
+//     lines.classed("selected--lines", function(d) {
+//         const condition = selection[0] <= d[filterKey] && d[filterKey] <= selection[1];
+//         const current = d3.select(this)
+//         const y2 = current.attr('y2');
+//         return condition; 
+//     });
 
-    lines.classed("unselected--lines", function(d) {
-        const condition = d[filterKey] < selection[0] || d[filterKey] > selection[1];
-        const current = d3.select(this)
-        const y1 = this.getAttribute('y1')
+//     lines.classed("unselected--lines", function(d) {
+//         const condition = d[filterKey] < selection[0] || d[filterKey] > selection[1];
+//         const current = d3.select(this)
+//         const y1 = this.getAttribute('y1')
         
-        if (condition) { 
-            current.transition().attr('y2', d => { return y1 - 2; });
-        } else if (!condition) {
-            current.transition().attr('y2', d => { return y1 - scale(d[filter]); });
-        }
-        return condition;
-    });
+//         if (condition) { 
+//             current.transition().attr('y2', d => { return y1 - 2; });
+//         } else if (!condition) {
+//             current.transition().attr('y2', d => { return y1 - scale(d[filter]); });
+//         }
+//         return condition;
+//     });
 
-    dots.classed("selected--cells", function(d) { 
-        return selection[0] <= d.datum[filterKey] && d.datum[filterKey] <= selection[1]; 
-    });
-}
+//     dots.classed("selected--cells", function(d) { 
+//         return selection[0] <= d.datum[filterKey] && d.datum[filterKey] <= selection[1]; 
+//     });
+// }
 
 const tooltip = (_data, _container) => {
     let module = {},
     container = _container,
     block__name, block__type, block__status
     data = _data[2] // send real data as the input
+
+    const props = [
+        {'name': 'Name'},
+        {'sponsor': 'Träger'},
+        {'county': 'Bundesland'},
+        {'year': 'Gründung'},
+        {'count_studies': 'Anzahl Studiengänge'},
+        {'count_students': 'Anzahl Studenten'}
+    ];
     
     module.init = () => {
         const wrapper = container.append('div')
             .attr('class', 'tooltip__wrapper')
 
-            const props = [
-                {'name': 'Name'},
-                {'sponsor': 'Träger'},
-                {'county': 'Bundesland'},
-                {'year': 'Gründung'},
-                {'count_studies': 'Anzahl Studiengänge'},
-                {'count_students': 'Anzahl Studenten'}
-            ];
-
             props.forEach(prop => {
-                console.log(Object.values(prop)[0]);
-                const block__name = wrapper.append('div')
+                block__name = wrapper.append('div')
                     .attr('class', `block__${Object.keys(prop)[0]}`)
 
-                const block__type = block__name
+                block__type = block__name
                     .append('span')
                     .attr('class', `block__${Object.keys(prop)[0]}--type`)
                     .text(`${Object.values(prop)[0]}: `)
 
-                const block__status = block__name
+                block__status = block__name
                     .append('span')
                     .attr('class', `block__${Object.keys(prop)[0]}--status`)
                     .text(data[Object.keys(prop)[0]])
             })
     }
-        module.update = () => {
-
+        module.update = (data) => {
+            props.forEach (prop => {
+                const selection = d3.select(`.block__${Object.keys(prop)[0]}--status`);
+                selection.text(data.datum[Object.keys(prop)[0]])
+            })
         }
-    
         return module;
     }
 
